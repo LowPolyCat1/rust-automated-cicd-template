@@ -1,0 +1,55 @@
+name: Require linked issue
+
+# pull_request_target (not pull_request) so the token can close PRs from forks.
+# Safe here because no PR code is checked out or run.
+on:
+  pull_request_target:
+    types: [opened, reopened, edited]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  check:
+    # Dependabot and the release bot (the changelog PR) have no issue to link.
+    if: ${{ !contains(fromJSON('["dependabot[bot]", "rust-ci-template-bot[bot]"]'), github.event.pull_request.user.login) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close PR without a linked issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          CONTRIBUTING_URL: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.event.repository.default_branch }}/CONTRIBUTING.md
+        run: |
+          # closingIssuesReferences covers closing keywords in the body and issues linked in the sidebar.
+          count=$(gh api graphql \
+            -f query='query($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                pullRequest(number: $number) { closingIssuesReferences(first: 1) { totalCount } }
+              }
+            }' \
+            -f owner="${REPO%/*}" -f name="${REPO#*/}" -F number="$NUMBER" \
+            --jq '.data.repository.pullRequest.closingIssuesReferences.totalCount')
+
+          if [ "$count" -gt 0 ]; then
+            echo "PR #$NUMBER links to an issue."
+            exit 0
+          fi
+
+          # An edit of a closed PR must not post the comment again.
+          if [ "$(gh pr view "$NUMBER" --repo "$REPO" --json state --jq .state)" != "OPEN" ]; then
+            exit 0
+          fi
+
+          gh pr close "$NUMBER" --repo "$REPO" --comment "$(cat <<MSG
+          This pull request does not link to an issue. Each pull request must close an issue.
+
+          To reopen this pull request, do these steps:
+
+          1. Add a closing keyword and the issue number to the description. For example, write \`Closes #123\`.
+          2. Reopen the pull request.
+
+          The [contributing guide]($CONTRIBUTING_URL) gives the full process.
+          MSG
+          )"
