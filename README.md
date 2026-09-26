@@ -49,8 +49,8 @@ pushed to Dependabot PRs.
 
 1. Go to **Settings > Developer settings > GitHub Apps > New GitHub App** (your account or the organization).
 2. Give it any name and homepage URL, and untick **Webhook > Active**.
-3. Under **Repository permissions** set **Contents**, **Pull requests** and **Workflows** to *Read and write*.
-   Workflows is only needed to update PR branches that change files in `.github/workflows`.
+3. Under **Repository permissions** set the permissions from the table below. Leave everything
+   else at *No access*; no organization or account permissions are needed.
 4. Create the app, then copy the **Client ID** from its settings page into `BOT_CLIENT_ID`.
 5. Under **Private keys** click **Generate a private key** and paste the whole downloaded `.pem`
    file (including the `BEGIN`/`END` lines) into `BOT_PRIVATE_KEY`.
@@ -60,8 +60,22 @@ pushed to Dependabot PRs.
 
 1. Go to **Settings > Developer settings > Personal access tokens > Fine-grained tokens > Generate new token**.
 2. Under **Repository access** choose **Only select repositories** and pick this repository.
-3. Set **Contents**, **Pull requests** and **Workflows** to *Read and write*.
+3. Under **Repository permissions** set the permissions from the table below.
 4. Save the token as `RELEASE_TOKEN`, and renew it before it expires.
 
 The token acts as your account, so actions it takes (such as `@dependabot rebase` comments) show up
-under your name. With the app configured it is only used for those Dependabot comments.
+under your name. With the app configured it is only used for those Dependabot comments. It needs an
+account with write access to the repository, since Dependabot ignores commands from anyone else.
+A classic token works too, with the `repo` and `workflow` scopes.
+
+**Permissions (same for the app and the token)**
+
+| Permission | Access | Used for |
+|---|---|---|
+| Contents | Read and write | Pushing version bumps and the changelog branch, merging PRs, comparing a PR with the default branch |
+| Pull requests | Read and write | Opening the changelog PR, enabling auto-merge, updating PR branches, `@dependabot` comments, labels |
+| Workflows | Read and write | Merging or updating PRs that touch `.github/workflows`, e.g. Dependabot's GitHub Actions updates, or version bumps on PR branches that pick up workflow changes from the default branch |
+| Metadata | Read-only | Required by GitHub, set automatically |
+
+Tags, GitHub releases and publishing use the workflow's own `GITHUB_TOKEN` or `CARGO_REGISTRY_TOKEN`,
+so neither the app nor the token needs more than this.
