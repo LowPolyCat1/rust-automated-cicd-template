@@ -1,0 +1,31 @@
+{
+  "id": 24040215,
+  "name": "claude/**",
+  "target": "branch",
+  "source_type": "Repository",
+  "source": "LowPolyCat1/rust-automated-cicd-template",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "refs/heads/claude/**"
+      ]
+    }
+  },
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "creation"
+    },
+    {
+      "type": "update"
+    }
+  ],
+  "bypass_actors": []
+}
