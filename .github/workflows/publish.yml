@@ -1,0 +1,64 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag to publish (e.g. v0.3.1)
+        required: true
+        type: string
+  workflow_dispatch:
+
+env:
+  # Package to publish in a multi-crate workspace (see .github/scripts/package.sh).
+  CRATE: ${{ vars.CRATE }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Resolve package
+        id: pkg
+        run: .github/scripts/package.sh
+
+      - name: Verify tag matches package version
+        if: inputs.tag != '' || startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          NAME: ${{ steps.pkg.outputs.name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+          MANIFEST: ${{ steps.pkg.outputs.manifest }}
+        run: |
+          if [ "${TAG#v}" != "$VERSION" ]; then
+            echo "Tag $TAG does not match $NAME version $VERSION in $MANIFEST" >&2
+            exit 1
+          fi
+
+      - name: cargo publish --dry-run
+        run: cargo publish -p "${{ steps.pkg.outputs.name }}" --all-features --dry-run
+
+      # Without a crates.io token the release only gets a tag and a GitHub release.
+      - name: cargo publish
+        if: env.CARGO_REGISTRY_TOKEN != ''
+        run: cargo publish -p "${{ steps.pkg.outputs.name }}" --all-features
+
+      - name: Skip crates.io
+        if: env.CARGO_REGISTRY_TOKEN == ''
+        run: echo "::notice::CARGO_REGISTRY_TOKEN is not set; not publishing to crates.io."
