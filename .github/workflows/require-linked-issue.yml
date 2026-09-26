@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   check:
-    # Bot PRs (Dependabot, the changelog PR) have no issue to link.
-    if: ${{ !endsWith(github.event.pull_request.user.login, '[bot]') }}
+    # Dependabot and the release bot (the changelog PR) have no issue to link.
+    if: ${{ !contains(fromJSON('["dependabot[bot]", "rust-ci-template-bot[bot]"]'), github.event.pull_request.user.login) }}
     runs-on: ubuntu-latest
     steps:
       - name: Close PR without a linked issue
