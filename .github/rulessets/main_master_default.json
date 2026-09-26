@@ -1,16 +1,16 @@
 {
-  "id": 24040193,
-  "name": "main/master/default",
+  "id": 16408240,
+  "name": "Protect Main/Master/Default",
   "target": "branch",
   "source_type": "Repository",
-  "source": "LowPolyCat1/rust-automated-cicd-template",
+  "source": "LowPolyCat1/locale-rs",
   "enforcement": "active",
   "conditions": {
     "ref_name": {
       "exclude": [],
       "include": [
-        "refs/heads/main",
         "~DEFAULT_BRANCH",
+        "refs/heads/main",
         "refs/heads/master"
       ]
     }
@@ -23,23 +23,14 @@
       "type": "non_fast_forward"
     },
     {
-      "type": "creation"
-    },
-    {
-      "type": "update"
-    },
-    {
-      "type": "required_linear_history"
-    },
-    {
       "type": "pull_request",
       "parameters": {
         "required_approving_review_count": 0,
         "dismiss_stale_reviews_on_push": true,
         "required_reviewers": [],
         "require_code_owner_review": true,
-        "require_last_push_approval": true,
-        "required_review_thread_resolution": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true,
         "require_extra_approval_for_unattributed_changes": true,
         "allowed_merge_methods": [
           "merge",
@@ -53,20 +44,52 @@
       "parameters": {
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
-        "required_status_checks": []
-      }
-    },
-    {
-      "type": "code_scanning",
-      "parameters": {
-        "code_scanning_tools": [
+        "required_status_checks": [
           {
-            "tool": "CodeQL",
-            "security_alerts_threshold": "all",
-            "alerts_threshold": "all"
+            "context": "clippy",
+            "integration_id": 15368
+          },
+          {
+            "context": "build (macos-latest, stable)",
+            "integration_id": 15368
+          },
+          {
+            "context": "build (ubuntu-latest, stable)",
+            "integration_id": 15368
+          },
+          {
+            "context": "build (windows-latest, stable)",
+            "integration_id": 15368
+          },
+          {
+            "context": "test",
+            "integration_id": 15368
+          },
+          {
+            "context": "fmt",
+            "integration_id": 15368
+          },
+          {
+            "context": "cargo-deny (advisories)",
+            "integration_id": 15368
+          },
+          {
+            "context": "cargo-deny (licenses)",
+            "integration_id": 15368
+          },
+          {
+            "context": "semver",
+            "integration_id": 15368
+          },
+          {
+            "context": "GitGuardian Security Checks",
+            "integration_id": 46505
           }
         ]
       }
+    },
+    {
+      "type": "required_linear_history"
     },
     {
       "type": "code_quality",
