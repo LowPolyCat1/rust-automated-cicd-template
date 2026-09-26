@@ -38,3 +38,30 @@ Variables:
 |---|---|
 | `CRATE` | Crate to release in a workspace without a root package and with several members. |
 | `COVERAGE_MIN` | Minimum line coverage in percent. |
+
+### Creating the bot secrets
+
+Add secrets under **Settings > Secrets and variables > Actions**. Semver runs on Dependabot PRs
+only see **Dependabot** secrets, so add the bot secrets there as well if version bumps should be
+pushed to Dependabot PRs.
+
+**GitHub App (`BOT_CLIENT_ID`, `BOT_PRIVATE_KEY`)**
+
+1. Go to **Settings > Developer settings > GitHub Apps > New GitHub App** (your account or the organization).
+2. Give it any name and homepage URL, and untick **Webhook > Active**.
+3. Under **Repository permissions** set **Contents**, **Pull requests** and **Workflows** to *Read and write*.
+   Workflows is only needed to update PR branches that change files in `.github/workflows`.
+4. Create the app, then copy the **Client ID** from its settings page into `BOT_CLIENT_ID`.
+5. Under **Private keys** click **Generate a private key** and paste the whole downloaded `.pem`
+   file (including the `BEGIN`/`END` lines) into `BOT_PRIVATE_KEY`.
+6. Click **Install App** and install it on this repository.
+
+**Personal access token (`RELEASE_TOKEN`)**
+
+1. Go to **Settings > Developer settings > Personal access tokens > Fine-grained tokens > Generate new token**.
+2. Under **Repository access** choose **Only select repositories** and pick this repository.
+3. Set **Contents**, **Pull requests** and **Workflows** to *Read and write*.
+4. Save the token as `RELEASE_TOKEN`, and renew it before it expires.
+
+The token acts as your account, so actions it takes (such as `@dependabot rebase` comments) show up
+under your name. With the app configured it is only used for those Dependabot comments.
