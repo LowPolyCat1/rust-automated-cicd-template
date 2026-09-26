@@ -12,7 +12,7 @@ permissions:
 jobs:
   check:
     # Bot PRs (Dependabot, the changelog PR) have no issue to link.
-    if: github.event.pull_request.user.type != 'Bot'
+    if: ${{ !endsWith(github.event.pull_request.user.login, '[bot]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Close PR without a linked issue
