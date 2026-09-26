@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+env:
+  # Package to check in a multi-crate workspace (see .github/scripts/package.sh).
+  CRATE: ${{ vars.CRATE }}
+
+jobs:
+  # Only pull requests are filtered; pushes to the default branch always run everything.
+  # The gate is job-level (not `on.pull_request.paths`) so that skipped required
+  # checks are still reported as successful. If the filter itself fails, `run` is
+  # empty and everything runs.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      run: ${{ github.event_name != 'pull_request' || steps.filter.outputs.run == 'true' }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            run:
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/ci.yml'
+
+  msrv:
+    name: MSRV-check
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read package and MSRV
+        id: pkg
+        shell: bash
+        run: |
+          msrv=$(.github/scripts/package.sh | sed -n 's/^rust_version=//p')
+          if [ -z "$msrv" ]; then
+            echo "::error::rust-version is not set in the package's Cargo.toml."
+            exit 1
+          fi
+          echo "MSRV: $msrv"
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.pkg.outputs.rust_version }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Only the package itself is checked: dev-dependencies may need a newer
+      # toolchain and don't affect users of the crate.
+      - name: Check (default features)
+        run: cargo check -p "${{ steps.pkg.outputs.name }}" --locked
+
+      - name: Check (all features)
+        run: cargo check -p "${{ steps.pkg.outputs.name }}" --all-features --locked

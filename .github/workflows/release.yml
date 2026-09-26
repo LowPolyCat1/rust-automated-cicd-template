@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Package to release in a multi-crate workspace (see .github/scripts/package.sh).
+  CRATE: ${{ vars.CRATE }}
+
+jobs:
+  tag:
+    # Only the default branch releases, whichever of main/master it is.
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      created: ${{ steps.tag.outputs.created }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve package
+        id: pkg
+        run: .github/scripts/package.sh
+
+      - name: Tag package version
+        id: tag
+        shell: bash
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          tag="v$VERSION"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+            echo "Tag $tag already exists, nothing to release."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "$NAME $VERSION"
+          git push origin "$tag"
+          echo "created=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::Created tag $tag"
+
+  # Tags pushed with GITHUB_TOKEN don't trigger other workflows, so publish is called directly.
+  publish:
+    needs: tag
+    if: needs.tag.outputs.created == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    secrets: inherit
+
+  changelog:
+    needs: [tag, publish]
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/changelog.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    secrets: inherit
+
+  # Open PRs were semver-checked against the old default branch. Bring them up to
+  # date so the check re-runs (and bumps past the version that was just released):
+  #   - Dependabot PRs: `@dependabot rebase`, or `@dependabot recreate` once other
+  #     commits (e.g. a version bump) are on the branch, since Dependabot then
+  #     refuses to rebase. Both also resolve Cargo.lock conflicts.
+  #   - Other auto-merge PRs: GitHub's "Update branch" (merge the base in).
+  refresh-prs:
+    needs: tag
+    runs-on: ubuntu-latest
+    env:
+      BOT_CLIENT_ID: ${{ secrets.BOT_CLIENT_ID }}
+    steps:
+      - name: Create bot token
+        id: app
+        if: env.BOT_CLIENT_ID != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.BOT_CLIENT_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+
+      - name: Refresh open PRs that are behind the default branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || secrets.RELEASE_TOKEN }}
+          # Dependabot ignores commands from apps, so these need a user's token.
+          DEPENDABOT_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.ref_name }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::Neither the bot app nor RELEASE_TOKEN is configured; skipping PR refresh."
+            exit 0
+          fi
+          while IFS=$'\t' read -r number sha author auto; do
+            behind=$(gh api "repos/$REPO/compare/$sha...$BASE" --jq .ahead_by)
+            [ "$behind" -gt 0 ] || continue
+            echo "#$number is $behind commits behind $BASE"
+            if [[ "$author" == *dependabot* ]]; then
+              foreign=$(gh api "repos/$REPO/pulls/$number/commits" \
+                --jq '[.[] | select(.author.login != "dependabot[bot]")] | length')
+              if [ "$foreign" -eq 0 ]; then cmd=rebase; else cmd=recreate; fi
+              if [ -z "$DEPENDABOT_TOKEN" ]; then
+                echo "::warning::RELEASE_TOKEN is not set; cannot ask Dependabot to $cmd #$number."
+              else
+                GH_TOKEN="$DEPENDABOT_TOKEN" gh pr comment "$number" --repo "$REPO" --body "@dependabot $cmd"
+              fi
+            elif [ "$auto" = "true" ]; then
+              gh api -X PUT "repos/$REPO/pulls/$number/update-branch" -f expected_head_sha="$sha" \
+                || echo "::warning::Could not update #$number (merge conflict?)"
+            fi
+          done < <(gh pr list --repo "$REPO" --base "$BASE" --state open --limit 100 \
+            --json number,headRefOid,author,autoMergeRequest \
+            --jq '.[] | [.number, .headRefOid, .author.login, (.autoMergeRequest != null)] | @tsv')

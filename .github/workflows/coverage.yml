@@ -1,0 +1,62 @@
+name: coverage
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  # Package to measure in a multi-crate workspace (see .github/scripts/package.sh).
+  CRATE: ${{ vars.CRATE }}
+
+jobs:
+  # Only pull requests are filtered; pushes to the default branch always run everything.
+  # The gate is job-level (not `on.pull_request.paths`) so that skipped required
+  # checks are still reported as successful. If the filter itself fails, `run` is
+  # empty and everything runs.
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      run: ${{ github.event_name != 'pull_request' || steps.filter.outputs.run == 'true' }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            run:
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - '.github/workflows/coverage.yml'
+
+  coverage:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Resolve package
+        id: pkg
+        run: .github/scripts/package.sh
+
+      # Minimum line coverage in percent, from the COVERAGE_MIN repository variable.
+      # Raise it as tests are added.
+      - name: Coverage gate
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
+          MIN: ${{ vars.COVERAGE_MIN || '0' }}
+        run: cargo llvm-cov -p "$NAME" --all-features --summary-only --fail-under-lines "$MIN"
