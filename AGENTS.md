@@ -61,8 +61,15 @@ The commands of this repository are in `docs/readiness.md`.
 
 ## Completion
 
-Before you report a task as completed, the lint command and the test command of
-`docs/readiness.md` must pass. Run the command exactly as that document writes it.
+If a task changes a file that a check reads, run that check before you report the task
+as completed. The check must pass. Run the command exactly as `docs/readiness.md` writes
+it.
+
+The path filter in `.github/workflows/clippy.yml` lists the files of the lint check. The
+path filter in `.github/workflows/test.yml` lists the files of the test check.
+
+If a task changes no file of a check, that check is not necessary. Tell the operator
+which check you did not run.
 
 A command without the flag for the full workspace reads the default member only. CI
 reads every crate, and a task that passes a smaller command still fails CI.
