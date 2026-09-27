@@ -93,6 +93,11 @@ for a future need.
 
 If a design decision is necessary, ask the operator before you write the code.
 
+## Subagents
+
+Give a complex task to a subagent. `docs/subagents.md` gives the triggers and the
+workflow.
+
 ## Git
 
 Work on a branch. Do not commit to `master`.
